@@ -1,0 +1,304 @@
+EDA - Final Project by Xu Ren
+========================================================
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using
+# in your analysis in this code chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk.
+# This prevents the code from displaying in the knitted HTML output.
+# You should set echo=FALSE for all code chunks in your file.
+
+library(ggplot2)
+library(dplyr)
+library(memisc)
+library(rpart)
+library(rattle)
+library(gridExtra)
+
+```
+
+```{r echo=FALSE, Load_the_Data}
+setwd("~/OneDrive/Udacity/Data_Analyst/dataAnalysisWithR/final_project_R/")
+# Load the Data
+
+red_wine_original <- read.delim(file="wineQualityReds.csv", header = TRUE, sep=",", row.names = NULL)
+
+```
+
+# Univariate Plots Section
+```{r echo=FALSE, Univariate_Plots}
+
+# subset dataframe to remove the extraneous first column ID created
+# from read.delim()
+wine_analysis <- red_wine_original[,2:13]
+
+
+# structure of wine_analysis
+str(wine_analysis)
+
+# There are 1599 observations and 12 variables in our wine dataset. 
+
+# summary statistics of all variables
+summary(wine_analysis)
+
+## It is interesting to note that all of the feature variables in this dataset are numeric. The variable of interest, "quality", is an integer variable with a range of 3 to 8. This is of interest because the research background suggests that the range of quality (which is a rating of each wine given by at least three expert judges) is setup to be from 0 (very bad) to 10 (very excellent). 
+
+## Furthermore, it is interesting to note that the variable "sulphates" has a median value of 0.62 and 3rd quartile value of 0.73, yet it has a maximum value of 2.0. This may present itself to be an outlier. The maximum values of "chlorides", "free.sulfur.dioxide", and "total.sulful.dioxide" all appear to have the possibility of containing outliers. 
+
+
+# histogram of quality
+ggplot(data=wine_analysis, aes(x=quality)) + geom_histogram(binwidth=1)
+# the majority of wines have a quality of 5 or 6, but there does appear to be a slight preference for the expert judges to give out a few higher quality wines
+
+
+# histogram of pH
+# We can see from the range of pH that all wines are acidic (pH of less than 7)
+ggplot(data=wine_analysis, aes(x=pH)) + geom_histogram(binwidth=0.25)
+# The majority of wines have a pH value between 3 and 3.75, but a few have pH below 3 or above 3.75. It will be interesting later to see how the level of pH may affect the value of quality of each wine.
+
+
+# histogram of sulphates
+ggplot(data=wine_analysis, aes(x=sulphates)) + geom_histogram(binwidth=0.1)
+# For the most part, sulphates still appear to look like a normal distribution, but there may be some outliers beyond the 1.5 value. 
+
+
+# histogram of chlorides
+ggplot(data=wine_analysis, aes(x=chlorides)) + geom_histogram(binwidth=0.01)
+# There may be some outliers beyond the chlorides value of 0.2
+# We will keep an eye out for any effects this may have on our quality variable later in the analysis. 
+
+
+# create a binary variable "good.bad" to classify wines that have a quality greater than 5 as 1 ("good") else classify as 0 ("bad").
+wine_analysis$good.bad <- ifelse(wine_analysis$quality>5, 1, 0)
+# this binary classification will make our exploratory analysis of bivariate and multivariate modeling a bit simpler
+
+
+```
+# Univariate Analysis
+
+### What is the structure of your dataset?
+This is a clean dataset by Cortez et. al in 2009. The dataset is clean and the only variable that contains values of zero is "citric.acid", which is plausible and can be trusted.   
+
+### What is/are the main feature(s) of interest in your dataset?
+Given my limited knowledge about red wine, my experience would tell me that the alcohol content, acidity (pH), and the amount of sulphates may have a real impact on the quality of a particular wine. Additional features that may be of intrest are chlorides, citric.acid, or residual.sugar. We will also explore the relationship of volatile.acidity, fixed.acidity, and sulfur.dioxide. Later in our data exploration, we may also create bins for more qualitative data analysis.   
+
+### Did you create any new variables from existing variables in the dataset?
+Lastly, I created a binary field for "good" and "bad" wines. I am stepping outside of my role as a data explorer here briefly and stepping into my role as a potential consumer of red wines. It is my opinion that as a consumer, I am less interested in trying to predict the "value" of the quality variable (i.e. whether a wine is a 3 versus a wine is a 7) but more interested in knowing the likelihood of whether a wine will be good or not. Therefore, I decided to bin the wine quality variable into a logistic (binary) variable so that I can later perform a logistic regression for classification or a decision tree. This will allow me, the consumer, to perhaps narrow down a list of wines that I may be considering for my next party to those that are most likely to be considered "good." To me, this is much more useful!   
+
+
+# Bivariate Plots Section
+```{r echo=FALSE, Bivariate_Plots}
+
+# First, do more acidic (lower pH) wines receive a higher quality?
+# Since quality consist of integers between 3 and 8, we can turn it into a factor and graph boxplots of each quality against pH
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=pH)) + geom_boxplot()
+# Indeed, it appears that wines that received a better quality tend to be more acidic
+# However, this relationship does not appear to be evident when pH is compared to our binary "good.bad" classifier of wine quality
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=pH)) + geom_boxplot()
+
+
+# Next, let us explore the relationship between alcohol content and the quality of wine
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=alcohol)) + geom_boxplot()
+# The wines that received a higher quality rating have higher alcohol content, but there appears to be other variables at play, especially when quality was right in the middle. We can smooth out this volatility by using our binary class "good.bad".
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=alcohol)) + geom_boxplot()
+# As evident, the median value of the "good" wines have a significantly higher alcohol content than that of the "bad" wines
+
+
+# Now, given that chlorides refer to the amount of salt in a particular bottle of wine, we can explore quality and chlorides
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=chlorides)) + geom_boxplot()
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=chlorides)) + geom_boxplot()
+# Given the outliers in chlorides, we can subset the data
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=chlorides)) + geom_boxplot() + ylim(0.05, .15)
+# "Good" wines may have slightly lower levels of chlorides
+
+# Similarly, residual.sugar may affect the taste quality of a particular wine
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=residual.sugar)) + geom_boxplot()
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=residual.sugar)) + geom_boxplot()
+# Limit outliers
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=residual.sugar)) + geom_boxplot() + ylim(0,4)
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=residual.sugar)) + geom_boxplot() + ylim(0,4)
+# It appeared odd to me that there does not seem to be a strong relationship between higher quality and higher levels of residual.sugar, perhaps because neither too sweet nor not sweet enough is a good sign for quality
+
+
+# Next, I am aware that the level of sulphates often impact the taste of wine
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=sulphates)) + geom_boxplot()
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=sulphates)) + geom_boxplot()
+# Indeed, we see that higher quality wines tend to have higher values for sulphates
+
+
+# Next, citric acid is often regarded as "freshness" of wine
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=citric.acid)) + geom_boxplot()
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=citric.acid)) + geom_boxplot()
+# Again, the median values of citric.acid for "good" wines are higher than that of "bad" wines
+
+
+# We know from the background research that higher levels of volatile.acidity can produce an unpleasant taste
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=volatile.acidity)) + geom_boxplot()
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=volatile.acidity)) + geom_boxplot()
+# If we want a higher quality wine, it would be wise to limit the level of volatile acidity
+
+
+# total sulfur dioxide can also negatively impact the quality of wine at high levels
+ggplot(data=wine_analysis, aes(x=as.factor(quality), y=total.sulfur.dioxide)) + geom_boxplot()
+# the relationship is not exactly linear here, as low and high ratings of quality tend to have lower levels of total.sulfur.dioxide
+# when we look at this at our categorical bin for quality, we can see that on average "good" wines will have a slightly lower amount of total.sulfur.dioxide, though beware of all the outliers
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=total.sulfur.dioxide)) + geom_boxplot()
+
+
+```
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+I was very surprised that pH did not seem to have a significantly strong distinction between the "good" wines versus the "bad" wines. When looking at the quality variable, it did appear that higher quality rated wines were slightly more acidic, but this relationship was not nearly as strong as I assumed. I was very surprised that residual.sugar did not have as strongly an effect on "good" versus "bad" wines either. 
+
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+It was very informative to have noticed that the boxplots for citric.acid and volatile.acidity showed a relatively strong distinction between the "good" and "bad" wines. Based on my prior (limited) knowledge of wines, I would not have known the importance of these features. However, I do know about the importance of alcohol content, most likely due to the fact that common cultural lingo often refers to wines and spirits in relation to their "percent of alcohol." I noticed that the "good" wines tend to have higher levels of alcohol content, for that stronger, fuller body taste. 
+
+
+### What was the strongest relationship you found?
+I am most interested in the boxplot comparing the median values of alcohol between "good" and "bad" wines. I saw the the median value for alcohol among the "good" wines were quite higher than those of the "bad" wines. However, the alcohol content of the "bad" wines were also more volatile, with greater variance between the maximum and minimum values. 
+
+
+
+# Multivariate Plots Section
+
+```{r echo=FALSE, Multivariate_Plots}
+
+pairs(wine_analysis[,1:11], col=as.factor(wine_analysis$good.bad))
+# It appears that alcohol, citric.acid, fixed.acidity, volatile.acidity, sulphates, free.sulfur.dioxide, and total.sulfur.dioxide may all have some significance in classifying whether any given wine could be considered "good" or "bad"
+
+ggplot(data=wine_analysis, aes(x=alcohol, y=citric.acid, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+# Again, it seems very clear that alcohol has a pretty good decision boundary for "good" versus "bad" wines. It also seems that more "good" wines are concentrated with slightly higher levels of citric.acid than "bad" ones
+
+ggplot(data=wine_analysis, aes(x=alcohol, y=pH, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+# While alcohol content shows a strong decision boundary, pH does not appear to show as much distinction between "good" wines versus "bad" wines
+
+ggplot(data=wine_analysis, aes(x=alcohol, y=sulphates, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+# I find this to be a very interesting plot. Visualizing alcohol content and sulphates together shows that a combination of higher alcohol content and higher sulphates level makes for a "good" wine
+
+ggplot(data=wine_analysis, aes(x=alcohol, y=density, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+# This plot is interesting because of the near linear nature of the two variables, alcohol and density. This correlation may exist because density of the water is related to alcohol content and sugar content. We should keep this potential co-linear relaitonship in the back of our minds when we estimate some models. 
+
+ggplot(data=wine_analysis, aes(x=alcohol, y=total.sulfur.dioxide, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+ggplot(data=wine_analysis, aes(x=alcohol, y=free.sulfur.dioxide, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+# Both the total and the free sulfur.dioxide variables are a bit messy when it comes to identifying their decision boundaries between the "good" and the "bad" wines. 
+
+ggplot(data=wine_analysis, aes(x=alcohol, y=fixed.acidity, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+ggplot(data=wine_analysis, aes(x=alcohol, y=volatile.acidity, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5)
+# While the acidity variables do not appear to be very strongly classifying wines into "good" or "bad", there does appear to be some relationship between lower acidity levels and higher classification into "good" wines
+
+
+# Now I want to look at some of the feature variables and how likely they are to predicting "good" or "bad" wines
+ggplot(data=wine_analysis, aes(alcohol, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+ggplot(data=wine_analysis, aes(density, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+ggplot(data=wine_analysis, aes(citric.acid, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+ggplot(data=wine_analysis, aes(chlorides, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+ggplot(data=wine_analysis, aes(pH, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+# pH showed virtually no relationship
+ggplot(data=wine_analysis, aes(sulphates, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+# sulphates shows a pretty strong positive relationship
+ggplot(data=wine_analysis, aes(residual.sugar, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+# residual.sugar also no strong relationship
+ggplot(data=wine_analysis, aes(volatile.acidity, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+ggplot(data=wine_analysis, aes(fixed.acidity, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+# quite the difference between volatile.acidity and fixed.acidity
+ggplot(data=wine_analysis, aes(total.sulfur.dioxide, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+# some potential outliers here with total.sulfur.dioxide
+ggplot(data=wine_analysis, aes(free.sulfur.dioxide, good.bad)) + geom_point() + stat_smooth(method="glm", family="binomial")
+
+
+
+# Logistic regression model on predicting the "good" wines
+# feature variables will be alcohol, volatile.acidity, sulphates, chlorides, and pH
+# reasoning is because these are the variables I will most likely have access to and can easily get information on when I am purchasing wines as a consumer 
+logm1 <- glm(good.bad ~ alcohol, data=wine_analysis, family=binomial)
+logm2 <- update(logm1, ~ . + volatile.acidity)
+logm3 <- update(logm2, ~ . + sulphates)
+logm4 <- update(logm3, ~ . + chlorides)
+logm5 <- update(logm3, ~ . + pH)
+
+mtable(logm1, logm2, logm3, logm4, logm5)
+
+logm5.probs <- predict(logm5, type="response")
+
+predictions <- ifelse(logm5.probs>0.5, 1, 0)
+
+table(wine_analysis$good.bad)
+# the actual dataset classifies 855 wines as "good"
+
+table(predictions)
+# our prediction classifies 811 wines as "good"
+
+table(predictions, wine_analysis$good.bad)
+# confusion matrix
+mean(predictions==wine_analysis$good.bad)
+# about 72.98% were accurately classified
+
+# this is quite good and is more than sufficient next time I go to buy some wine!
+# If only price/cost was another feature I can consider :)
+
+
+# trying tree model
+quality.tree <- rpart(good.bad ~ alcohol + volatile.acidity + sulphates + chlorides + pH, data=wine_analysis)
+
+pred.tree <- predict(quality.tree, wine_analysis)
+
+tree.predictions <- ifelse(pred.tree>0.5, 1, 0)
+
+table(tree.predictions, wine_analysis$good.bad)
+mean(tree.predictions==wine_analysis$good.bad)
+# about 75.05% were accurately classified
+# only slightly better than our logistic regression
+
+# however, having a decision tree will make my purchasing process much easier!
+fancyRpartPlot(quality.tree)
+# interesting to note that the features chlorides and pH did not come into play in our decision tree
+
+```
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+Again, alcohol content, even as it related to other feature variables, was the most strongly explanatory for quality. I was most interested when alcohol was plotted in conjunction with sulphates, volatile.acidity, density, and chlorides as they appeared to further strengthen the decision boundary between "good" and "bad" wines. 
+
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+Yes, I created a few logistic regression models as well as a decision tree model. First, it must be stated that this is not a true machine learning exercise. No attention was given to tuning, cross-validation, and pruning/penalization. The logistic regression model was useful in seeing what feature variables really affected the binary "good" and "bad" wines. This is useful to me as a consumer of wine, especially as I am often limited in the information I can gather in a very short period of time at the store. However, as a human, I also cannot easily implement a logistic regression model at the store, so I decided to also use a decision tree model. The decision tree is much more helpful for my next trip to the wine store; moreover, the decision tree captures interaction between the features that the logistic regression did not. 
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+ggplot(data=wine_analysis, aes(x=as.factor(good.bad), y=alcohol)) + geom_boxplot() + xlab("Low and High Quality Wines") + ylab("Alcohol Content (%)") + ggtitle("Boxplot: Alcohol Content of Low and High Quality Wines")
+```
+
+### Description One
+This boxplot places "bad" and "good" wines next to each other and their respective descriptive values for alcohol content. "Good" wines appeared to have higher levels of alcohol content, though the content level of "bad" wines are more dispersed. 
+
+### Plot Two
+```{r echo=FALSE, Plot_Two}
+g1 <- ggplot(data=wine_analysis, aes(x=alcohol, y=sulphates, colour=as.factor(good.bad))) + geom_point(position="jitter", alpha=0.5) + xlab("Alcohol Content (%)") + ylab("Sulphates (g / dm3)") + ggtitle("Scatter: Low and High Quality Wines by Alcohol and Sulphates") + theme(legend.position="none")
+g2 <- ggplot(data=wine_analysis, aes(x=alcohol, y=sulphates, colour=as.factor(good.bad))) + geom_density2d() + xlab("Alcohol Content (%)") + ylab("Sulphates (g / dm3)") + ggtitle("Density: Low and High Quality Wines by Alcohol and Sulphates") + scale_color_discrete(name="Low and High Quality\nWines")
+grid.arrange(g1, g2, nrow=2)
+```
+
+### Description Two
+I found the interaction between alcohol content and sulphates together to be most interesting in delineating between "bad" and "good" wines. The scatter as well as the density plot highlight this differentiation.
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+fancyRpartPlot(quality.tree)
+```
+
+### Description Three
+Though not strictly an exploratory plot, this decision tree shows the importance of the various features as well as a guide for purchasing wine. Furthermore, it highlights the interaction between alcohol, sulphates, and volatile acidity. 
+
+------
+
+# Reflection
+The Wine Quality dataset is a tidy dataset of 1,599 observations. It is made public for research by P. Cortez et al. I intentionally did not read the paper "Using Data Mining for Wine Quality Assessment" until after the final project, so as to prevent biases and to fully grapple the dataset on my own. I started by understanding the distribution of the quality of wines in the dataset. I then created a binary variable for labeling "good" and "bad" wines simply on whether the quality was greater than 5 or less than equal to 5. I then explored various features as well as combinations of features as they relate to the "good" and "bad" label. I was most positively suprised that chlorides, pH, residual sugar, and citric acid all did not have a stronger relationship to the quality label. Ultimately, I created a few logistic regression models as well as a decision tree model using all observations in the dataset. There are quite a few limitations to this model. First, I have simiplified the quality label into only two classes. As a consumer of wines, I felt that this was sufficient for my next trip to the store. Furthermore, the dataset is based on sensory judging, which may vary significantly from individual to individual. Nonetheless, the decision tree may provide a simple guide for deciding the next wine to try. It would also be helpful to have datasets from different time periods or different judges to see how "accurate" the models can still perform.  
